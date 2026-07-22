@@ -1,7 +1,7 @@
 # CLAUDE.md — Aegis
 
 > Ten plik jest aktualizowany po każdym ukończonym etapie (sprincie) projektu.
-> Ostatnia aktualizacja: 2026-07-22 (po Sprint 3, Sprint 4 w toku).
+> Ostatnia aktualizacja: 2026-07-22 (Sprint 4 w toku — eval-gate i konsola gotowe, IaC i docs w trakcie).
 
 ## Czym jest Aegis i po co powstaje
 
@@ -138,7 +138,21 @@ Poza `src/aegis/`:
     tool_safety, guardrails, robustness), job `eval-gate` w `.github/workflows/ci.yml`
     (wymaga 100% przejść), test regresyjny uruchamiający cały bank przypadków pod `pytest`.
     *(commit `c7d247a` + kolejny z przypadkami/CI)*
-  - [ ] Konsola operatora (React + TypeScript + Tailwind) — nierozpoczęte.
+  - [x] **Konsola operatora** (`console/`, React 19 + TypeScript + Tailwind v4 + Vite,
+    react-router-dom). Dashboard (cost report), Runs (trigger + lista + step-by-step trace
+    viewer), Admin (create/rotate/revoke API keys). Zweryfikowana na żywo: pełny
+    `docker compose up` + `alembic upgrade head` + `scripts/seed.py` (nowy — bootstrap
+    pierwszego klucza admina, bo każdy inny klucz wymaga już klucza admina) + realne wywołania
+    API przez proxy Vite. Przy tej weryfikacji znalezione i naprawione 4 realne bugi
+    blokujące wdrożenie (nie tylko konsolę): `config.py`'s `REPO_ROOT` liczony z `__file__` psuł
+    się w niededytowalnej instalacji (obraz Docker) — naprawione przez zmienne środowiskowe;
+    `knowledge_base_docs.json` nigdy nie było zadeklarowane jako package data, więc znikało z
+    zbudowanego wheela; `Dockerfile` nie kopiował `alembic.ini`, więc migracje nie dały się
+    uruchomić w kontenerze; `LocalProvider` puszczał surowy `httpx.HTTPStatusError` na 4xx z
+    Ollamy (np. 404, gdy model nie jest jeszcze `ollama pull`-owany — najbardziej prawdopodobny
+    błąd przy pierwszym uruchomieniu) zamiast `ProviderError`, co dawało nieobsłużone 500
+    zamiast czystego statusu "failed". Job `console` w CI (`npm ci`, lint, type-check + build).
+    *(commity `6e441fc`, `4ab5fee`, `55388d8`)*
   - [ ] IaC (Terraform AWS, Bicep Azure, tylko walidacja statyczna) — nierozpoczęte.
   - [ ] Diagramy C4 (`docs/architecture/`), `docs/cost-model.md`, `docs/runbook.md` —
     nierozpoczęte. `docs/threat-model.md` (STRIDE) już istnieje i jest kompletny sprzed tego
