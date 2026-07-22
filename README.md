@@ -6,7 +6,7 @@ cost policy enforced centrally, model providers swappable without touching appli
 > **Portfolio project.** Built to demonstrate GenAI solution architecture: provider
 > abstraction, policy-based routing, agent runtime, guardrails, cost control, multi-tenancy,
 > an evaluation gate wired into CI, observability, and reviewable (never deployed) multi-cloud
-> IaC. See `docs/` for architecture (C4), 10 ADRs, threat model, cost model, and a runbook.
+> IaC. See `docs/` for architecture (C4), 8 ADRs, threat model, cost model, and a runbook.
 
 ## Zero-cost, local-first — read this before you run anything
 
@@ -91,14 +91,20 @@ Built in 4 sprints; this README and `docs/` are updated as each sprint lands.
       audit log, cost tracking + monthly budget enforcement (soft alert / hard stop), and
       multi-tenancy/RBAC (Argon2-hashed API keys with rotation, roles enforced at the DB query
       layer — see ADR-0005) wired into both API entry points.
-- [ ] **Sprint 4** — Evaluation harness wired into CI as a merge gate, React console, IaC
-      (Terraform/Bicep, statically validated), full architecture documentation.
+- [x] **Sprint 4** — Evaluation harness (58 golden-fixture cases, `eval/cases/`) wired into CI
+      as a merge gate (see [ADR-0008](docs/adr/0008-eval-gate-golden-fixtures.md)), operator
+      console (`console/`, React + TypeScript + Tailwind: dashboard, agent runs + trace viewer,
+      admin API keys), IaC (`infra/terraform` for AWS, `infra/bicep` for Azure, both statically
+      validated in CI — `terraform validate`/`tflint`/`checkov` and `bicep build`/`bicep lint`),
+      and full architecture documentation (`docs/architecture/` C4 diagrams, `docs/cost-model.md`,
+      `docs/runbook.md`; `docs/threat-model.md` already existed from Sprint 3).
 
 ## Repository layout
 
 ```
 src/aegis/          FastAPI app, provider layer, agent runtime, governance, cost, tenancy
 console/            React + TypeScript + Tailwind operator console
+eval/               Eval-gate: 58 golden-fixture cases run as a CI merge gate (ADR-0008)
 policies/           YAML policy: routing, guardrails, pricing, tenants
 infra/terraform/    AWS IaC (Bedrock, IAM, VPC endpoints, Secrets Manager) — validated, not applied
 infra/bicep/        Azure IaC (AI Foundry, Key Vault, Private Endpoint, Managed Identity) — same
