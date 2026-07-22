@@ -41,7 +41,9 @@ async def _seed(tenant_id: str, role: Role) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tenant-id", default="acme-support", help="must exist in policies/tenants.yaml")
+    parser.add_argument(
+        "--tenant-id", default="acme-support", help="must exist in policies/tenants.yaml"
+    )
     parser.add_argument("--role", choices=[r.value for r in Role], default="admin")
     args = parser.parse_args()
     asyncio.run(_seed(args.tenant_id, Role(args.role)))

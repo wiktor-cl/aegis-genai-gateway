@@ -129,8 +129,8 @@ docs/architecture/  C4 diagrams (Mermaid)
 python -m venv .venv && .venv\Scripts\activate   # or: source .venv/bin/activate
 pip install -e ".[dev]"
 pytest tests/unit tests/contract
-ruff check src tests
-mypy src
+ruff check src tests scripts
+mypy src scripts
 ```
 
 ## License

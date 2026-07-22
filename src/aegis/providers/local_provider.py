@@ -25,8 +25,48 @@ from aegis.providers.base import (
     ProviderUnavailableError,
     Role,
     StreamChunk,
+    ToolCall,
+    ToolSpec,
     Usage,
 )
+
+
+def _ollama_tools_payload(tools: list[ToolSpec]) -> list[dict] | None:
+    """Ollama's /api/chat `tools` field mirrors OpenAI's function-calling
+    shape. Omitted entirely (not an empty list) when there are no tools —
+    some model chat templates behave differently when `tools: []` is present
+    at all versus genuinely absent."""
+    if not tools:
+        return None
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.parameters,
+            },
+        }
+        for t in tools
+    ]
+
+
+def _parse_ollama_tool_calls(message: dict) -> list[ToolCall]:
+    """Ollama includes an `id` per call as of recent versions, but earlier
+    ones may not — synthesize one from the index so `ToolCall.id` (required)
+    is always populated either way."""
+    calls = message.get("tool_calls") or []
+    parsed: list[ToolCall] = []
+    for i, call in enumerate(calls):
+        function = call.get("function", {})
+        parsed.append(
+            ToolCall(
+                id=call.get("id") or f"call-{i}",
+                name=function.get("name", ""),
+                arguments=function.get("arguments") or {},
+            )
+        )
+    return parsed
 
 
 def _raise_for_ollama_status(resp: httpx.Response) -> None:
@@ -55,7 +95,7 @@ class LocalProvider(LLMProvider):
         self._timeout_s = timeout_s
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
-        payload = {
+        payload: dict = {
             "model": request.model,
             "messages": [
                 {"role": m.role.value, "content": m.content} for m in request.messages
@@ -66,6 +106,10 @@ class LocalProvider(LLMProvider):
                 "num_predict": request.max_output_tokens,
             },
         }
+        tools_payload = _ollama_tools_payload(request.tools)
+        if tools_payload is not None:
+            payload["tools"] = tools_payload
+
         started = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=self._timeout_s) as client:
@@ -82,7 +126,9 @@ class LocalProvider(LLMProvider):
         _raise_for_ollama_status(resp)
         body = resp.json()
 
-        content = body.get("message", {}).get("content", "")
+        message = body.get("message", {})
+        content = message.get("content", "")
+        tool_calls = _parse_ollama_tool_calls(message)
         usage = Usage(
             input_tokens=body.get("prompt_eval_count", 0),
             output_tokens=body.get("eval_count", 0),
@@ -90,10 +136,13 @@ class LocalProvider(LLMProvider):
         _ = time.monotonic() - started  # surfaced via observability middleware, not here
         return ChatResponse(
             message=ChatMessage(role=Role.ASSISTANT, content=content),
+            tool_calls=tool_calls,
             usage=usage,
             provider_name=self.name,
             model=request.model,
-            finish_reason="stop" if body.get("done", True) else "length",
+            finish_reason=(
+                "tool_use" if tool_calls else ("stop" if body.get("done", True) else "length")
+            ),
             raw=body,
         )
 
