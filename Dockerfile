@@ -12,6 +12,7 @@ COPY src ./src
 RUN pip install --no-cache-dir .
 
 COPY policies ./policies
+COPY alembic.ini ./
 
 EXPOSE 8000
 

@@ -27,16 +27,28 @@ cost policy enforced centrally, model providers swappable without touching appli
 - Nothing here is a claim of production deployment. It is a claim of reviewable, tested,
   deployable-as-is code — verified as far as that can be verified for free.
 
-## Run it (3 commands)
+## Run it
 
 ```bash
 cp .env.example .env
 docker compose up --build
 curl http://localhost:8000/health
+
+# first run only — creates the schema (migrations are a deliberate separate
+# step, not baked into the image's CMD, so scaling to multiple API replicas
+# never races migrations against each other)
+docker compose exec api alembic upgrade head
+
+# bootstrap the first admin API key — every other key is minted through the
+# API itself, which needs an admin key to call; this is the one bootstrap
+# exception (see scripts/seed.py)
+AEGIS_DATABASE_URL=postgresql+asyncpg://aegis:aegis@localhost:5432/aegis \
+    python scripts/seed.py --tenant-id acme-support --role admin
 ```
 
 This starts Postgres, Redis, a local Ollama instance, and the Aegis API — fully offline, no
-cloud credentials anywhere in the stack (see `docker-compose.yml`).
+cloud credentials anywhere in the stack (see `docker-compose.yml`). The operator console
+(`console/`) is a separate `npm run dev` step — see `console/README.md`.
 
 ## Architecture at a glance
 

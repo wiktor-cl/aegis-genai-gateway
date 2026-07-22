@@ -54,6 +54,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Without this, setuptools only packages .py files — knowledge_base_docs.json
+# would silently be missing from the built wheel (present in the editable
+# dev install, absent once actually installed non-editable, e.g. in the
+# Docker image — a real gap only caught by running the built image).
+"aegis.agent.tools" = ["*.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

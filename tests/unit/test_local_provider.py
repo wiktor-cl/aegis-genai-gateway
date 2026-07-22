@@ -12,6 +12,7 @@ from aegis.providers.base import (
     ChatMessage,
     ChatRequest,
     EmbedRequest,
+    ProviderAuthError,
     ProviderTimeoutError,
     ProviderUnavailableError,
     Role,
@@ -77,6 +78,30 @@ async def test_chat_raises_provider_unavailable_on_5xx() -> None:
     provider = LocalProvider(base_url=BASE_URL)
 
     with pytest.raises(ProviderUnavailableError):
+        await provider.chat(_request())
+
+
+@respx.mock
+async def test_chat_raises_provider_unavailable_on_404_model_not_pulled() -> None:
+    # The single most likely first-run mistake: the model in policies/routing.yaml
+    # hasn't been `ollama pull`ed. Must become a clean ProviderError, not a raw
+    # httpx.HTTPStatusError bubbling up as an unhandled 500 (see local_provider.py's
+    # _raise_for_ollama_status and docs/threat-model.md I5).
+    respx.post(f"{BASE_URL}/api/chat").mock(
+        return_value=httpx.Response(404, text='{"error":"model \\"llama3.1:8b\\" not found"}')
+    )
+    provider = LocalProvider(base_url=BASE_URL)
+
+    with pytest.raises(ProviderUnavailableError):
+        await provider.chat(_request())
+
+
+@respx.mock
+async def test_chat_raises_provider_auth_error_on_401() -> None:
+    respx.post(f"{BASE_URL}/api/chat").mock(return_value=httpx.Response(401))
+    provider = LocalProvider(base_url=BASE_URL)
+
+    with pytest.raises(ProviderAuthError):
         await provider.chat(_request())
 
 

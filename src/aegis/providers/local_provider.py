@@ -20,12 +20,31 @@ from aegis.providers.base import (
     EmbedRequest,
     EmbedResponse,
     LLMProvider,
+    ProviderAuthError,
     ProviderTimeoutError,
     ProviderUnavailableError,
     Role,
     StreamChunk,
     Usage,
 )
+
+
+def _raise_for_ollama_status(resp: httpx.Response) -> None:
+    """Every non-2xx from Ollama must become a `ProviderError` subtype, never
+    a raw `httpx.HTTPStatusError` — otherwise it reaches the API layer
+    unhandled as a raw 500 (see docs/threat-model.md I5). A 404 here usually
+    just means the model named in `policies/routing.yaml` hasn't been
+    `ollama pull`ed yet — the single most likely first-run mistake for
+    anyone cloning this repo, so it must fail cleanly, not with a traceback.
+    """
+    if resp.status_code < 400:
+        return
+    if resp.status_code in (401, 403):
+        raise ProviderAuthError(f"Ollama returned {resp.status_code}")
+    raise ProviderUnavailableError(
+        f"Ollama returned {resp.status_code}: {resp.text[:200]!r} "
+        "— is the model pulled? see `ollama pull <model>` in README"
+    )
 
 
 class LocalProvider(LLMProvider):
@@ -60,9 +79,7 @@ class LocalProvider(LLMProvider):
                 f"cannot reach Ollama at {self._base_url} — is `ollama serve` running?"
             ) from exc
 
-        if resp.status_code >= 500:
-            raise ProviderUnavailableError(f"Ollama returned {resp.status_code}")
-        resp.raise_for_status()
+        _raise_for_ollama_status(resp)
         body = resp.json()
 
         content = body.get("message", {}).get("content", "")
@@ -92,8 +109,7 @@ class LocalProvider(LLMProvider):
             async with httpx.AsyncClient(timeout=self._timeout_s) as client, client.stream(
                 "POST", f"{self._base_url}/api/chat", json=payload
             ) as resp:
-                if resp.status_code >= 500:
-                    raise ProviderUnavailableError(f"Ollama returned {resp.status_code}")
+                _raise_for_ollama_status(resp)
                 async for line in resp.aiter_lines():
                     if not line:
                         continue
@@ -132,7 +148,7 @@ class LocalProvider(LLMProvider):
                         f"{self._base_url}/api/embeddings",
                         json={"model": request.model, "prompt": text},
                     )
-                    resp.raise_for_status()
+                    _raise_for_ollama_status(resp)
                     vectors.append(resp.json()["embedding"])
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(

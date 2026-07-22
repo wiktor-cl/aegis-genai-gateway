@@ -48,6 +48,18 @@ services:
       AEGIS_DATABASE_URL: postgresql+asyncpg://aegis:aegis@postgres:5432/aegis
       AEGIS_REDIS_URL: redis://redis:6379/0
       AEGIS_OLLAMA_BASE_URL: http://ollama:11434
+      # config.py's default policy paths are computed from `__file__`, which
+      # resolves correctly for the editable dev install (src/ in place) but
+      # NOT once aegis is pip-installed non-editable into this image's
+      # site-packages — the policies/ directory the Dockerfile COPYs to
+      # /app/policies is nowhere near site-packages/aegis at that point.
+      # Every policy-path setting is already independently overridable via
+      # env (pydantic-settings, AEGIS_ prefix), so pointing them at the
+      # image's actual WORKDIR is the fix, not a code change.
+      AEGIS_ROUTING_POLICY_PATH: /app/policies/routing.yaml
+      AEGIS_GUARDRAILS_POLICY_PATH: /app/policies/guardrails.yaml
+      AEGIS_PRICING_POLICY_PATH: /app/policies/pricing.yaml
+      AEGIS_TENANTS_POLICY_PATH: /app/policies/tenants.yaml
       # Deliberately absent: any AWS_* or AZURE_* credential. BedrockProvider
       # and FoundryProvider are constructed (see src/aegis/main.py) but this
       # stack never calls them — the routing policy in policies/routing.yaml
