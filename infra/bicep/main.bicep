@@ -42,13 +42,14 @@ resource aegisApiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023
 }
 
 // ---------------------------------------------------------------------------
-// Key Vault for the JWT signing key (AWS equivalent: infra/terraform/secrets.tf).
+// Key Vault for the Postgres credential the API connects with (see
+// src/aegis/config.py's `database_url`; AWS equivalent: infra/terraform/secrets.tf).
 // RBAC-authorized (not vault access policies — the modern, reviewable-in-IaC
 // approach), public network access disabled, reached only via the private
 // endpoint below.
 // ---------------------------------------------------------------------------
-resource jwtSigningKeyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'kv-aegis-${environment}-jwt'
+resource databaseCredentialsVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: 'kv-aegis-${environment}-db'
   location: location
   tags: commonTags
   properties: {
@@ -74,9 +75,9 @@ resource jwtSigningKeyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 // policy's per-model-ARN scoping in infra/terraform/iam.tf.
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 
-resource jwtSecretReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(jwtSigningKeyVault.id, aegisApiIdentity.id, keyVaultSecretsUserRoleId)
-  scope: jwtSigningKeyVault
+resource databaseCredentialsReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(databaseCredentialsVault.id, aegisApiIdentity.id, keyVaultSecretsUserRoleId)
+  scope: databaseCredentialsVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
     principalId: aegisApiIdentity.properties.principalId
@@ -92,8 +93,8 @@ resource jwtSecretReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@
 // Private endpoint + DNS — Key Vault traffic never leaves Azure's private
 // network (AWS equivalent: infra/terraform/network.tf's Bedrock VPC endpoint).
 // ---------------------------------------------------------------------------
-resource jwtKeyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = {
-  name: 'pe-aegis-${environment}-jwt-kv'
+resource databaseCredentialsPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = {
+  name: 'pe-aegis-${environment}-db-kv'
   location: location
   tags: commonTags
   properties: {
@@ -102,9 +103,9 @@ resource jwtKeyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-
     }
     privateLinkServiceConnections: [
       {
-        name: 'aegis-jwt-kv-connection'
+        name: 'aegis-db-kv-connection'
         properties: {
-          privateLinkServiceId: jwtSigningKeyVault.id
+          privateLinkServiceId: databaseCredentialsVault.id
           groupIds: [
             'vault'
           ]
@@ -133,7 +134,7 @@ resource keyVaultPrivateDnsZoneVnetLink 'Microsoft.Network/privateDnsZones/virtu
 }
 
 resource keyVaultPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-09-01' = {
-  parent: jwtKeyVaultPrivateEndpoint
+  parent: databaseCredentialsPrivateEndpoint
   name: 'default'
   properties: {
     privateDnsZoneConfigs: [
@@ -203,5 +204,5 @@ resource aiFoundryRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-0
 
 output aegisApiIdentityPrincipalId string = aegisApiIdentity.properties.principalId
 output aegisApiIdentityClientId string = aegisApiIdentity.properties.clientId
-output jwtSigningKeyVaultUri string = jwtSigningKeyVault.properties.vaultUri
+output databaseCredentialsVaultUri string = databaseCredentialsVault.properties.vaultUri
 output aiFoundryEndpoint string = aiFoundryAccount.properties.endpoint

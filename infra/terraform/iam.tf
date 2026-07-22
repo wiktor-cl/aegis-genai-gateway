@@ -48,16 +48,16 @@ resource "aws_iam_role_policy" "aegis_bedrock_invoke" {
   policy = data.aws_iam_policy_document.bedrock_invoke.json
 }
 
-data "aws_iam_policy_document" "read_jwt_secret" {
+data "aws_iam_policy_document" "read_database_credentials" {
   statement {
-    sid       = "ReadJwtSigningKeySecretOnly"
+    sid       = "ReadDatabaseCredentialsSecretOnly"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.jwt_signing_key.arn]
+    resources = [aws_secretsmanager_secret.database_credentials.arn]
   }
 }
 
-resource "aws_iam_role_policy" "aegis_read_jwt_secret" {
-  name   = "aegis-read-jwt-secret"
+resource "aws_iam_role_policy" "aegis_read_database_credentials" {
+  name   = "aegis-read-database-credentials"
   role   = aws_iam_role.aegis_api_task_role.id
-  policy = data.aws_iam_policy_document.read_jwt_secret.json
+  policy = data.aws_iam_policy_document.read_database_credentials.json
 }

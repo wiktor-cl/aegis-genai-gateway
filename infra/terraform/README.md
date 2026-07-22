@@ -13,8 +13,8 @@ zero-cost constraint.
   `policies/routing.yaml` is configured to use (`var.allowed_bedrock_model_ids`) — not
   `bedrock:*` on `*`. A compromised task credential can invoke only the models the app is
   actually configured to call.
-- `secrets.tf` — a Secrets Manager secret for the JWT signing key
-  (`src/aegis/config.py`'s `jwt_signing_key`). Deliberately no secret *version* resource: that
+- `secrets.tf` — a Secrets Manager secret for the Postgres credential the API connects with
+  (`src/aegis/config.py`'s `database_url`). Deliberately no secret *version* resource: that
   would require a real secret value to exist in a Terraform plan/state, which this repository
   must never contain. A real deployment sets the value out-of-band, after this resource exists.
 - `network.tf` — an interface VPC endpoint for Bedrock Runtime, so calls stay on AWS's private
@@ -42,8 +42,8 @@ checkov -d . --framework terraform --skip-check CKV2_AWS_57,CKV_AWS_109,CKV_AWS_
 
 | Check | What it wants | Why skipped here |
 |---|---|---|
-| `CKV2_AWS_57` | Automatic Secrets Manager rotation | Needs a rotation Lambda that understands this secret's exact shape (an HS256 key consumed by `aegis.security.JwtService`); a generic one would break auth. Rotation is deliberately manual/out-of-band here — see `secrets.tf` and `docs/runbook.md`. |
-| `CKV_AWS_109`, `CKV_AWS_111`, `CKV_AWS_356` | No `"*"` in an IAM policy's actions/resources | These fire on `jwt_signing_key_kms`'s key policy, which is AWS's own documented default KMS key-policy shape (`kms:*` on `*` scoped to the account root principal) — in a *key* policy, `resources=["*"]` means "this key," not "every AWS resource." |
+| `CKV2_AWS_57` | Automatic Secrets Manager rotation | AWS's built-in Postgres rotation template assumes RDS/Aurora; this project's `docker-compose.yml` runs plain `postgres:16-alpine`, not RDS, so the template doesn't apply as-is. Rotation is deliberately manual/out-of-band here — see `secrets.tf` and `docs/runbook.md`. |
+| `CKV_AWS_109`, `CKV_AWS_111`, `CKV_AWS_356` | No `"*"` in an IAM policy's actions/resources | These fire on `database_credentials_kms`'s key policy, which is AWS's own documented default KMS key-policy shape (`kms:*` on `*` scoped to the account root principal) — in a *key* policy, `resources=["*"]` means "this key," not "every AWS resource." |
 
 Every other resource passes checkov, tflint (with the `aws` ruleset), and `terraform validate`
 clean — see `.github/workflows/ci.yml`, job `iac-validate`.

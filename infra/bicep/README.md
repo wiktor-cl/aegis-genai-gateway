@@ -13,8 +13,8 @@ Mirrors `infra/terraform`'s AWS shape, resource-for-resource:
 | This module (Azure) | `infra/terraform` (AWS) | Purpose |
 |---|---|---|
 | `aegisApiIdentity` (user-assigned managed identity) | `aws_iam_role.aegis_api_task_role` | What the Aegis API authenticates as |
-| `jwtSigningKeyVault` (Key Vault, RBAC-authorized, `publicNetworkAccess: Disabled`) | `aws_secretsmanager_secret.jwt_signing_key` | Holds the JWT signing key — no secret *value* in either module, same reasoning |
-| `jwtKeyVaultPrivateEndpoint` + private DNS zone | `aws_vpc_endpoint.bedrock_runtime` | Keeps traffic off the public internet |
+| `databaseCredentialsVault` (Key Vault, RBAC-authorized, `publicNetworkAccess: Disabled`) | `aws_secretsmanager_secret.database_credentials` | Holds the Postgres credential (`aegis.config.settings.database_url`) — no secret *value* in either module, same reasoning |
+| `databaseCredentialsPrivateEndpoint` + private DNS zone | `aws_vpc_endpoint.bedrock_runtime` | Keeps traffic off the public internet |
 | `aiFoundryAccount` + `aiFoundryModelDeployment` | Bedrock (referenced via IAM only — Bedrock itself isn't a Terraform resource here, it's an AWS-managed service) | Backs `FoundryProvider` (`src/aegis/providers/foundry_provider.py`) |
 | Role assignments (`Key Vault Secrets User`, `Cognitive Services OpenAI User`) | `aws_iam_role_policy` (Bedrock invoke, secret read) | Least privilege: identity can call inference / read the one secret, nothing else |
 

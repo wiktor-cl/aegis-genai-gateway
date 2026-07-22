@@ -1,7 +1,8 @@
-# Secrets Manager for the JWT signing key (see src/aegis/config.py's
-# `jwt_signing_key` — env-var-only today, with an explicit "not a real
-# secret" dev default; a real deployment injects this from here, never bakes
-# a value into the image or docker-compose.yml).
+# Secrets Manager for the Postgres credential the API connects with (see
+# src/aegis/config.py's `database_url` — a full connection string with an
+# embedded password, `postgresql+asyncpg://aegis:aegis@...` in dev/compose;
+# a real deployment injects the password from here instead of baking it into
+# an image or docker-compose.yml).
 #
 # Deliberately no `aws_secretsmanager_secret_version` resource: creating one
 # would require a real secret value in the Terraform state/plan, which is
@@ -11,12 +12,12 @@
 
 data "aws_caller_identity" "current" {}
 
-data "aws_iam_policy_document" "jwt_signing_key_kms" {
+data "aws_iam_policy_document" "database_credentials_kms" {
   # The standard AWS-default key policy, made explicit rather than implicit
   # (checkov CKV2_AWS_64 wants a policy on the resource, not an implied one):
   # the account root has full KMS administrative access, which is what lets
-  # IAM policies (e.g. aws_iam_role_policy.aegis_read_jwt_secret) grant
-  # `kms:Decrypt` to specific roles instead of managing access here too.
+  # IAM policies (e.g. aws_iam_role_policy.aegis_read_database_credentials)
+  # grant `kms:Decrypt` to specific roles instead of managing access here too.
   # `actions=["kms:*"]`/`resources=["*"]` here trips checkov's generic
   # IAM-wildcard rules (CKV_AWS_109/111/CKV_AWS_356), but this is a *key
   # policy*, where "*" scopes to "this key" by construction, not "every AWS
@@ -33,31 +34,33 @@ data "aws_iam_policy_document" "jwt_signing_key_kms" {
   }
 }
 
-resource "aws_kms_key" "jwt_signing_key" {
-  description         = "CMK for the Aegis JWT signing key secret (checkov CKV_AWS_149)"
+resource "aws_kms_key" "database_credentials" {
+  description         = "CMK for the Aegis Postgres credential secret (checkov CKV_AWS_149)"
   enable_key_rotation = true
-  policy              = data.aws_iam_policy_document.jwt_signing_key_kms.json
+  policy              = data.aws_iam_policy_document.database_credentials_kms.json
   tags                = var.tags
 }
 
-resource "aws_kms_alias" "jwt_signing_key" {
-  name          = "alias/aegis-${var.environment}-jwt-signing-key"
-  target_key_id = aws_kms_key.jwt_signing_key.key_id
+resource "aws_kms_alias" "database_credentials" {
+  name          = "alias/aegis-${var.environment}-database-credentials"
+  target_key_id = aws_kms_key.database_credentials.key_id
 }
 
 # checkov: CKV2_AWS_57 (automatic rotation) is deliberately skipped in CI's
-# invocation, not fixed here — automatic rotation needs a rotation Lambda
-# that understands *this specific* secret's shape (an HS256 signing key
-# consumed by aegis.security.JwtService); a generic bolt-on rotation
-# function would either no-op or actively break auth. Rotation here is a
-# deliberate, documented manual/out-of-band operation (see docs/runbook.md),
-# the same trade-off already made explicitly for API keys
-# (aegis.tenancy.api_keys — rotation exists, but is caller-triggered, not on
-# a timer). See infra/terraform/README.md for the full list of accepted
-# findings and why.
-resource "aws_secretsmanager_secret" "jwt_signing_key" {
-  name        = "aegis/${var.environment}/jwt-signing-key"
-  description = "HS256 signing key for Aegis JWT admin auth (aegis.tenancy.rbac). Value set out-of-band, never via Terraform."
-  kms_key_id  = aws_kms_key.jwt_signing_key.arn
+# invocation, not fixed here. AWS's built-in Secrets Manager rotation
+# template for Postgres assumes RDS/Aurora (it calls the RDS API to manage
+# the rotation window); this project's docker-compose.yml runs a plain
+# `postgres:16-alpine` container, not RDS, so that template doesn't apply
+# as-is. A real deployment on RDS would enable native rotation trivially —
+# noted here rather than pretending it's already wired up for infrastructure
+# this repository doesn't actually provision. Rotation here is a deliberate,
+# documented manual/out-of-band operation (see docs/runbook.md), the same
+# trade-off already made explicitly for API keys (aegis.tenancy.api_keys —
+# rotation exists, but is caller-triggered, not on a timer). See
+# infra/terraform/README.md for the full list of accepted findings and why.
+resource "aws_secretsmanager_secret" "database_credentials" {
+  name        = "aegis/${var.environment}/database-credentials"
+  description = "Postgres credential for the Aegis API (aegis.config.settings.database_url). Value set out-of-band, never via Terraform."
+  kms_key_id  = aws_kms_key.database_credentials.arn
   tags        = var.tags
 }

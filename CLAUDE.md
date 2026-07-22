@@ -1,7 +1,7 @@
 # CLAUDE.md — Aegis
 
 > Ten plik jest aktualizowany po każdym ukończonym etapie (sprincie) projektu.
-> Ostatnia aktualizacja: 2026-07-22 (Sprint 4 w toku — eval-gate i konsola gotowe, IaC i docs w trakcie).
+> Ostatnia aktualizacja: 2026-07-22 — Sprint 4 ukończony (eval-gate, konsola, IaC, dokumentacja architektury). Wszystkie 4 sprinty gotowe.
 
 ## Czym jest Aegis i po co powstaje
 
@@ -55,7 +55,10 @@ ograniczenie jest twarde i architektoniczne, nie tylko deklaratywne w README:
   klient Ollama (LocalProvider)
 - **Tokenizacja:** tiktoken
 - **Odporność:** tenacity (retry), własny per-provider circuit breaker
-- **Bezpieczeństwo:** python-jose[cryptography] (JWT), argon2-cffi (hash kluczy API)
+- **Bezpieczeństwo:** python-jose[cryptography] (zależność zarezerwowana pod planowany tryb
+  auth JWT — `AEGIS_JWT_SIGNING_KEY`/`AEGIS_JWT_ALGORITHM` istnieją w `config.py`, ale żaden
+  kod dziś nie wystawia/weryfikuje JWT; jedyny działający dziś mechanizm auth to klucze API),
+  argon2-cffi (hash kluczy API — mechanizm faktycznie używany)
 - **Observability:** structlog, OpenTelemetry (API/SDK + instrumentacja FastAPI + eksport
   OTLP), prometheus-client
 - **Konfiguracja polityk:** YAML (routing, guardrails, pricing, tenants)
@@ -125,7 +128,7 @@ Poza `src/aegis/`:
   twardy stop), multi-tenancy/RBAC (klucze API Argon2 z rotacją, role egzekwowane na poziomie
   zapytania do bazy — ADR-0005) wpięte w oba punkty wejścia API.
   *(commit `e75dba4`)*
-- **[ ] Sprint 4 — Evaluation gate, konsola, IaC. W TRAKCIE.** Harness ewaluacyjny jako merge
+- **[x] Sprint 4 — Evaluation gate, konsola, IaC. UKOŃCZONY.** Harness ewaluacyjny jako merge
   gate w CI, konsola operatora (React + TypeScript + Tailwind), IaC (Terraform dla AWS, Bicep
   dla Azure — tylko walidacja statyczna), pełna dokumentacja architektury (C4).
 
@@ -153,10 +156,32 @@ Poza `src/aegis/`:
     błąd przy pierwszym uruchomieniu) zamiast `ProviderError`, co dawało nieobsłużone 500
     zamiast czystego statusu "failed". Job `console` w CI (`npm ci`, lint, type-check + build).
     *(commity `6e441fc`, `4ab5fee`, `55388d8`)*
-  - [ ] IaC (Terraform AWS, Bicep Azure, tylko walidacja statyczna) — nierozpoczęte.
-  - [ ] Diagramy C4 (`docs/architecture/`), `docs/cost-model.md`, `docs/runbook.md` —
-    nierozpoczęte. `docs/threat-model.md` (STRIDE) już istnieje i jest kompletny sprzed tego
-    etapu.
+  - [x] **IaC.** `infra/terraform` (AWS): least-privilege IAM (Bedrock InvokeModel scoped do
+    dokładnych model ID z `policies/routing.yaml`), Secrets Manager + CMK dla poświadczeń bazy
+    danych (**nie** dla klucza JWT — JWT auth nigdy nie zostało zaimplementowane w kodzie,
+    `AEGIS_JWT_SIGNING_KEY` to zarezerwowane, nieużywane ustawienie; złapane i naprawione po
+    tym, jak IaC pierwotnie odwoływało się do nieistniejącego `aegis.security.JwtService`),
+    VPC endpoint dla Bedrock Runtime. Czyste pod `terraform validate`, `tflint` (ruleset aws),
+    `checkov` (4 znaleziska jawnie pominięte i udokumentowane w README — domyślna polityka
+    klucza KMS AWS oraz rotacja poświadczeń bazy celowo poza automatyzacją, bo natywna rotacja
+    Secrets Manager zakłada RDS/Aurora, a ten projekt używa zwykłego `postgres:16-alpine`).
+    `infra/bicep` (Azure): analogiczny kształt — managed identity, Key Vault (RBAC,
+    private-endpoint-only) dla poświadczeń bazy, konto AI Foundry z `disableLocalAuth`. Czyste
+    pod `bicep build`/`bicep lint`. Job `iac-validate` w CI (terraform/tflint/checkov/bicep, bez
+    żadnych poświadczeń chmurowych, nigdy apply/deploy).
+  - [x] **Dokumentacja architektury.** `docs/architecture/` — 3 diagramy C4 w Mermaid (context,
+    container, component), zweryfikowane przez `@mermaid-js/mermaid-cli` przed commitem.
+    `docs/cost-model.md` — realny vs. symulowany koszt, dlaczego `float` a nie `Decimal` (to nie
+    jest system billingowy jak meterflow). `docs/runbook.md` — incydenty (awaria providera,
+    budget hard-stop, fałszywe alarmy guardrails), migracje, backup/retencja, rotacja kluczy.
+    `docs/threat-model.md` (STRIDE) istniał już od Sprintu 3, bez zmian.
+
+  Przy weryfikacji na żywo tego sprintu znaleziono i naprawiono 5 realnych bugów (nie tylko w
+  konsoli — patrz wyżej): 4 blokujące faktyczne wdrożenie (`docker compose up` nie działał od
+  `/health` w górę) plus jeden błąd faktograficzny w samej dokumentacji/IaC (odwołanie do
+  nieistniejącego modułu JWT). Wzorzec: żadna z tych rzeczy nie została złapana przez
+  `pytest`/`ruff`/`mypy` — tylko przez faktyczne uruchomienie stacku i przeczytanie kodu, które
+  IaC miało opisywać.
 
 ## Kluczowe decyzje architektoniczne
 
