@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Env / secrets
+.env
+*.local.env
+
+# Node / console
+console/node_modules/
+console/dist/
+console/.vite/
+
+# IaC
+infra/terraform/**/.terraform/
+infra/terraform/**/*.tfstate
+infra/terraform/**/*.tfstate.*
+infra/terraform/**/.terraform.lock.hcl
+infra/bicep/**/*.json.bak
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,11 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [{ "text": "The capital of France is Paris." }]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": { "inputTokens": 24, "outputTokens": 9, "totalTokens": 33 },
+  "metrics": { "latencyMs": 812 }
+}

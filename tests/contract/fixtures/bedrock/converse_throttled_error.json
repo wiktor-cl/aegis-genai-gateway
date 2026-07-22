@@ -1,0 +1,4 @@
+{
+  "Error": { "Code": "ThrottlingException", "Message": "Too many requests, please wait before trying again." },
+  "ResponseMetadata": { "HTTPStatusCode": 429 }
+}

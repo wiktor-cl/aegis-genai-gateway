@@ -1,0 +1,60 @@
+# Provider routing policy. Loaded and validated by aegis.providers.router.RoutingPolicy.
+#
+# Rule evaluation: rules are checked top to bottom, first match wins. A rule
+# matches when every key under `when` is satisfied by the request's routing
+# context. `allow` is the ordered list of candidate providers for that rule —
+# first candidate is tried first, the router fails over to the next on a
+# retryable provider error.
+#
+# The one rule that must never be weakened: data classified confidential or
+# restricted only ever resolves to `local`. See docs/adr/0002-policy-based-routing.md
+# and docs/threat-model.md (data exfiltration via misrouting).
+
+version: 1
+default_provider: local
+
+providers:
+  local:
+    model: llama3.1:8b
+    region: local
+    cost_per_1k_input_tokens: 0.0
+    cost_per_1k_output_tokens: 0.0
+  bedrock:
+    model: anthropic.claude-3-5-sonnet-20241022-v2:0
+    region: us-east-1
+    cost_per_1k_input_tokens: 0.003
+    cost_per_1k_output_tokens: 0.015
+  foundry:
+    model: gpt-4o
+    region: eastus
+    cost_per_1k_input_tokens: 0.0025
+    cost_per_1k_output_tokens: 0.01
+
+rules:
+  - name: confidential-and-restricted-never-leave-org
+    when:
+      data_classification: [confidential, restricted]
+    allow: [local]
+
+  - name: internal-prefers-local-falls-back-to-cloud
+    when:
+      data_classification: [internal]
+    allow: [local, bedrock, foundry]
+
+  - name: public-cost-optimized
+    when:
+      data_classification: [public]
+      cost_tier: [economy]
+    allow: [local]
+
+  - name: public-quality-optimized
+    when:
+      data_classification: [public]
+      cost_tier: [standard, premium]
+    allow: [bedrock, foundry, local]
+
+failover:
+  max_attempts: 3
+  circuit_breaker:
+    failure_threshold: 5
+    reset_timeout_s: 30

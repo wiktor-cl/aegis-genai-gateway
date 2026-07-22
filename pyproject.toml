@@ -1,0 +1,74 @@
+[project]
+name = "aegis"
+version = "0.1.0"
+description = "Aegis — enterprise multi-cloud GenAI agent gateway and runtime"
+requires-python = ">=3.12"
+readme = "README.md"
+license = { text = "MIT" }
+
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32,<1.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "httpx>=0.27,<1.0",
+    "PyYAML>=6.0,<7.0",
+    "SQLAlchemy[asyncio]>=2.0,<3.0",
+    "asyncpg>=0.30,<1.0",
+    "alembic>=1.14,<2.0",
+    "redis>=5.2,<6.0",
+    "tenacity>=9.0,<10.0",
+    "structlog>=24.4,<25.0",
+    "opentelemetry-api>=1.28,<2.0",
+    "opentelemetry-sdk>=1.28,<2.0",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.28,<2.0",
+    "prometheus-client>=0.21,<1.0",
+    "boto3>=1.35,<2.0",
+    "azure-identity>=1.19,<2.0",
+    "openai>=1.54,<2.0",
+    "tiktoken>=0.8,<1.0",
+    "python-jose[cryptography]>=3.3,<4.0",
+    "argon2-cffi>=23.1,<24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "pytest-cov>=6.0,<7.0",
+    "respx>=0.21,<1.0",
+    "moto>=5.0,<6.0",
+    "testcontainers[postgres,redis]>=4.8,<5.0",
+    "ruff>=0.7,<1.0",
+    "mypy>=1.13,<2.0",
+    "types-PyYAML",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "contract: contract tests against recorded fixtures/fakes, never real network calls",
+    "integration: integration tests using Testcontainers (postgres/redis)",
+]

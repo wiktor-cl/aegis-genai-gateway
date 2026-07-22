@@ -1,0 +1,15 @@
+{
+  "id": "chatcmpl-fixture-0001",
+  "object": "chat.completion",
+  "created": 1721654400,
+  "model": "gpt-4o",
+  "choices": [
+    {
+      "index": 0,
+      "message": { "role": "assistant", "content": "The capital of France is Paris.", "tool_calls": null },
+      "finish_reason": "stop",
+      "logprobs": null
+    }
+  ],
+  "usage": { "prompt_tokens": 22, "completion_tokens": 8, "total_tokens": 30 }
+}

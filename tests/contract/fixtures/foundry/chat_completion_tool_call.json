@@ -1,0 +1,25 @@
+{
+  "id": "chatcmpl-fixture-0002",
+  "object": "chat.completion",
+  "created": 1721654460,
+  "model": "gpt-4o",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_8f2b1c",
+            "type": "function",
+            "function": { "name": "calculator", "arguments": "{\"expression\": \"12 * 7\"}" }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls",
+      "logprobs": null
+    }
+  ],
+  "usage": { "prompt_tokens": 35, "completion_tokens": 14, "total_tokens": 49 }
+}

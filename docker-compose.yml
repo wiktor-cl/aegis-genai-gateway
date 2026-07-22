@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: aegis
+      POSTGRES_DB: aegis
+    ports:
+      - "5432:5432"
+    volumes:
+      - aegis_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis -d aegis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Only provider actually invoked by this stack — no cloud credentials
+  # anywhere in this compose file. See docs/adr/0001-provider-abstraction-layer.md
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - aegis_ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      AEGIS_ENVIRONMENT: local
+      AEGIS_DATABASE_URL: postgresql+asyncpg://aegis:aegis@postgres:5432/aegis
+      AEGIS_REDIS_URL: redis://redis:6379/0
+      AEGIS_OLLAMA_BASE_URL: http://ollama:11434
+      # Deliberately absent: any AWS_* or AZURE_* credential. BedrockProvider
+      # and FoundryProvider are constructed (see src/aegis/main.py) but this
+      # stack never calls them — the routing policy in policies/routing.yaml
+      # only ever dispatches to "local" unless you supply real credentials
+      # and edit the policy yourself, outside of this repository's scope.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+volumes:
+  aegis_postgres_data:
+  aegis_ollama_data:

@@ -1,0 +1,19 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "toolUse": {
+            "toolUseId": "tooluse_9f1c2b3a",
+            "name": "calculator",
+            "input": { "expression": "12 * 7" }
+          }
+        }
+      ]
+    }
+  },
+  "stopReason": "tool_use",
+  "usage": { "inputTokens": 41, "outputTokens": 18, "totalTokens": 59 },
+  "metrics": { "latencyMs": 940 }
+}
