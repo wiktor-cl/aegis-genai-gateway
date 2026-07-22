@@ -28,8 +28,16 @@ console/.vite/
 infra/terraform/**/.terraform/
 infra/terraform/**/*.tfstate
 infra/terraform/**/*.tfstate.*
-infra/terraform/**/.terraform.lock.hcl
+# .terraform.lock.hcl is intentionally NOT ignored — this is a root
+# configuration (never a reusable module), and Terraform's own guidance is
+# to commit the lock file for root configs so `terraform init` is
+# reproducible in CI.
 infra/bicep/**/*.json.bak
+# Compiled ARM JSON (`bicep build` output) is a regenerable artifact, not
+# committed — but bicepconfig.json (source, hand-written) must be tracked.
+infra/bicep/**/*.json
+!infra/bicep/**/bicepconfig.json
+!infra/bicep/**/*.parameters.json
 
 # OS / editor
 .DS_Store

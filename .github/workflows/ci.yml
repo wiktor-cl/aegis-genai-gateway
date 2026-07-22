@@ -1,9 +1,9 @@
 name: CI
 
 # No cloud credentials are configured or required anywhere in this workflow —
-# see docs/adr/0003-local-first-contract-testing.md. Provider/IaC jobs added
-# in later sprints (build images, IaC static validation, eval-gate) extend
-# this file but keep that constraint.
+# see docs/adr/0003-local-first-contract-testing.md. `iac-validate` runs
+# `terraform validate`/`tflint`/`checkov` and `bicep build`/`bicep lint`
+# only — never `terraform apply` or `az deployment create`.
 
 on:
   push:
@@ -82,3 +82,56 @@ jobs:
       - name: Type-check and build
         working-directory: console
         run: npm run build
+
+  iac-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.64.0
+
+      - name: Install checkov
+        run: pip install checkov
+
+      - name: Install Bicep
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/download/v0.45.15/bicep-linux-x64
+          chmod +x bicep
+          sudo mv bicep /usr/local/bin/bicep
+
+      - name: Terraform fmt
+        working-directory: infra/terraform
+        run: terraform fmt -check -diff
+
+      - name: Terraform init (no backend — never applied, see README)
+        working-directory: infra/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: infra/terraform
+        run: terraform validate
+
+      - name: tflint
+        working-directory: infra/terraform
+        run: tflint --init && tflint
+
+      - name: checkov (AWS Terraform)
+        working-directory: infra/terraform
+        run: |
+          checkov -d . --framework terraform --compact \
+            --skip-check CKV2_AWS_57,CKV_AWS_109,CKV_AWS_111,CKV_AWS_356
+
+      - name: Bicep build
+        working-directory: infra/bicep
+        run: bicep build main.bicep --stdout > /dev/null
+
+      - name: Bicep lint
+        working-directory: infra/bicep
+        run: bicep lint main.bicep
