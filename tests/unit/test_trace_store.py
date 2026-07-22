@@ -66,3 +66,34 @@ async def test_replay_reconstructs_steps_in_order(trace_store) -> None:
 async def test_replay_unknown_run_raises(trace_store) -> None:
     with pytest.raises(ValueError):
         await trace_store.replay(uuid.uuid4())
+
+
+async def test_list_runs_is_scoped_by_tenant_and_most_recent_first(trace_store) -> None:
+    first = await trace_store.start_run(
+        tenant_id="t-1", agent_name="demo", max_steps=5, token_budget=1000
+    )
+    await trace_store.finish_run(first, status="completed", final_output="a")
+    second = await trace_store.start_run(
+        tenant_id="t-1", agent_name="demo", max_steps=5, token_budget=1000
+    )
+    await trace_store.finish_run(second, status="completed", final_output="b")
+    await trace_store.start_run(
+        tenant_id="t-2", agent_name="demo", max_steps=5, token_budget=1000
+    )
+
+    t1_runs = await trace_store.list_runs(tenant_id="t-1")
+    assert [r.id for r in t1_runs] == [second, first]  # most recent first
+
+    all_runs = await trace_store.list_runs(tenant_id=None)
+    assert len(all_runs) == 3
+
+
+async def test_list_runs_respects_limit(trace_store) -> None:
+    for _ in range(3):
+        run_id = await trace_store.start_run(
+            tenant_id="t-1", agent_name="demo", max_steps=5, token_budget=1000
+        )
+        await trace_store.finish_run(run_id, status="completed", final_output="x")
+
+    limited = await trace_store.list_runs(tenant_id="t-1", limit=2)
+    assert len(limited) == 2

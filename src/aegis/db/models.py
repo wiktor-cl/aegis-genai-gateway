@@ -10,7 +10,7 @@ from the database alone.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -40,8 +40,12 @@ class AgentRun(Base):
     error: Mapped[str | None] = mapped_column(Text, default=None)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(), default=lambda: datetime.now(UTC)
     )
+    """Python-side `default` (not just `server_default`) so ordering by this
+    column (see `TraceStore.list_runs`) has real precision even on SQLite,
+    whose `CURRENT_TIMESTAMP` is second-granularity — two runs started within
+    the same second would otherwise sort arbitrarily."""
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     steps: Mapped[list[AgentStep]] = relationship(

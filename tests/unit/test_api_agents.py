@@ -110,6 +110,29 @@ def test_viewer_can_read_own_tenants_run_trace(client_and_session) -> None:
     assert body["steps"][0]["step_type"] == "llm_call"
 
 
+def test_list_runs_returns_recent_runs_for_the_caller_tenant(client_and_session) -> None:
+    client, dev_token, viewer_token = client_and_session
+    created = client.post(
+        "/v1/agents/run",
+        json={"user_message": "hi", "data_classification": "confidential"},
+        headers=_auth(dev_token),
+    ).json()
+
+    resp = client.get("/v1/agents/runs", headers=_auth(viewer_token))
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["run_id"] == created["run_id"]
+    assert body[0]["status"] == "failed"
+
+
+def test_list_runs_requires_authentication(client_and_session) -> None:
+    client, _dev_token, _viewer_token = client_and_session
+    resp = client.get("/v1/agents/runs")
+    assert resp.status_code == 401
+
+
 def test_metrics_endpoint_is_prometheus_text_format(client_and_session) -> None:
     client, _dev_token, _viewer_token = client_and_session
     resp = client.get("/metrics")

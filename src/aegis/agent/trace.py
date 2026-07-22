@@ -110,6 +110,17 @@ class TraceStore:
         run.completed_at = datetime.now(UTC)
         await self._session.flush()
 
+    async def list_runs(self, tenant_id: str | None = None, limit: int = 50) -> list[AgentRun]:
+        """Most recent runs first — the console's "recent runs" view. Same
+        tenant-scoping-at-the-query-level rule as `get_run`/`replay` (ADR-0005):
+        `tenant_id=None` (admin only, enforced by the API route) returns runs
+        across every tenant."""
+        query = select(AgentRun).order_by(AgentRun.created_at.desc()).limit(limit)
+        if tenant_id is not None:
+            query = query.where(AgentRun.tenant_id == tenant_id)
+        result = await self._session.execute(query)
+        return list(result.scalars().all())
+
     async def get_run(self, run_id: uuid.UUID, tenant_id: str | None = None) -> AgentRun | None:
         """`tenant_id`, when given, is enforced as a WHERE clause on the
         query itself — not a post-fetch check — so a developer/viewer role

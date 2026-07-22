@@ -80,6 +80,17 @@ class AgentRunDetailOut(BaseModel):
     steps: list[AgentStepOut]
 
 
+class AgentRunSummaryOut(BaseModel):
+    run_id: uuid.UUID
+    agent_name: str
+    status: str
+    step_count: int
+    total_input_tokens: int
+    total_output_tokens: int
+    created_at: str
+    completed_at: str | None
+
+
 def _build_tools(session: AsyncSession) -> ToolRegistry:
     return ToolRegistry(
         [
@@ -164,6 +175,29 @@ async def run_agent(
         total_output_tokens=result.total_output_tokens,
         step_count=result.step_count,
     )
+
+
+@router.get("/runs", response_model=list[AgentRunSummaryOut])
+async def list_agent_runs(
+    limit: int = 50,
+    principal: Principal = Depends(require_role(Role.VIEWER)),
+    session: AsyncSession = Depends(get_session),
+) -> list[AgentRunSummaryOut]:
+    tenant_filter = None if principal.role == Role.ADMIN else principal.tenant_id
+    runs = await TraceStore(session).list_runs(tenant_id=tenant_filter, limit=limit)
+    return [
+        AgentRunSummaryOut(
+            run_id=run.id,
+            agent_name=run.agent_name,
+            status=run.status,
+            step_count=run.step_count,
+            total_input_tokens=run.total_input_tokens,
+            total_output_tokens=run.total_output_tokens,
+            created_at=run.created_at.isoformat(),
+            completed_at=run.completed_at.isoformat() if run.completed_at else None,
+        )
+        for run in runs
+    ]
 
 
 @router.get("/runs/{run_id}", response_model=AgentRunDetailOut)
