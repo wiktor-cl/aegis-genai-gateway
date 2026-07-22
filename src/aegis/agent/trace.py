@@ -110,11 +110,19 @@ class TraceStore:
         run.completed_at = datetime.now(UTC)
         await self._session.flush()
 
-    async def get_run(self, run_id: uuid.UUID) -> AgentRun | None:
-        return await self._session.get(AgentRun, run_id)
+    async def get_run(self, run_id: uuid.UUID, tenant_id: str | None = None) -> AgentRun | None:
+        """`tenant_id`, when given, is enforced as a WHERE clause on the
+        query itself — not a post-fetch check — so a developer/viewer role
+        can never even observe that a run belonging to another tenant
+        exists (see aegis.tenancy.rbac)."""
+        query = select(AgentRun).where(AgentRun.id == run_id)
+        if tenant_id is not None:
+            query = query.where(AgentRun.tenant_id == tenant_id)
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none()
 
-    async def replay(self, run_id: uuid.UUID) -> ReplayedRun:
-        run = await self._session.get(AgentRun, run_id)
+    async def replay(self, run_id: uuid.UUID, tenant_id: str | None = None) -> ReplayedRun:
+        run = await self.get_run(run_id, tenant_id=tenant_id)
         if run is None:
             raise ValueError(f"no such run: {run_id}")
 

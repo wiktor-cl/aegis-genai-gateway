@@ -1,0 +1,18 @@
+# Tenant registry. API keys themselves are NOT here — they live in the
+# `api_keys` table (see aegis.tenancy.api_keys.ApiKeyStore) because keys need
+# runtime operations (create/rotate/revoke) that a static YAML file loaded
+# once at startup can't support. This file is the static part: which tenants
+# exist, which guardrail policy profile they use, and their monthly budget.
+
+version: 1
+
+tenants:
+  - id: acme-support
+    display_name: "Acme Support Team"
+    guardrail_policy: standard
+    monthly_budget_usd: 500.0
+
+  - id: acme-legal
+    display_name: "Acme Legal Team"
+    guardrail_policy: legal_hold
+    monthly_budget_usd: 200.0

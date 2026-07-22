@@ -1,0 +1,23 @@
+# Pricing table used to compute a simulated cost per request/run.
+#
+# For the local provider this is real (zero, since Ollama has no per-token
+# cost). For Bedrock/Foundry these are list prices used purely to *simulate*
+# what a request would have cost had it actually gone to that provider —
+# see docs/adr/0003-local-first-contract-testing.md and docs/cost-model.md.
+# No real invoice was ever generated from these numbers.
+
+version: 1
+default_currency: USD
+
+providers:
+  local:
+    "llama3.1:8b": { input_per_1k_usd: 0.0, output_per_1k_usd: 0.0 }
+  bedrock:
+    "anthropic.claude-3-5-sonnet-20241022-v2:0":
+      { input_per_1k_usd: 0.003, output_per_1k_usd: 0.015 }
+  foundry:
+    "gpt-4o": { input_per_1k_usd: 0.0025, output_per_1k_usd: 0.01 }
+
+fallback:
+  input_per_1k_usd: 0.0
+  output_per_1k_usd: 0.0

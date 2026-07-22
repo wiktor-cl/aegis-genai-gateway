@@ -4,6 +4,11 @@
 step-by-step trace: the same data structure that would be used to
 deterministically replay the run is what the console (Sprint 4) renders as
 the "step through this run" view.
+
+The caller never supplies `tenant_id` directly — it comes from the
+authenticated `Principal` (see aegis.tenancy.rbac), and a developer/viewer
+can only ever see their own tenant's runs, enforced by `TraceStore` filtering
+at the query level, not by hiding rows in the response.
 """
 
 from __future__ import annotations
@@ -22,14 +27,18 @@ from aegis.agent.tools.registry import ToolRegistry
 from aegis.agent.tools.sql_readonly import SqlReadOnlyTool
 from aegis.agent.trace import TraceStore
 from aegis.config import settings
+from aegis.cost.budgets import BudgetEnforcer, BudgetStatus
+from aegis.cost.tracker import CostTracker
 from aegis.db.session import get_session
+from aegis.governance.audit import AuditStore
 from aegis.providers.router import RoutingContext
+from aegis.tenancy.models import Role
+from aegis.tenancy.rbac import Principal, require_role
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
 
 class AgentRunIn(BaseModel):
-    tenant_id: str
     agent_name: str = "default"
     system_prompt: str = "You are a helpful assistant with access to tools."
     user_message: str
@@ -86,21 +95,64 @@ def _build_tools(session: AsyncSession) -> ToolRegistry:
 async def run_agent(
     body: AgentRunIn,
     request: Request,
+    principal: Principal = Depends(require_role(Role.DEVELOPER)),
     session: AsyncSession = Depends(get_session),
 ) -> AgentRunOut:
+    tenant_id = principal.tenant_id
+    tenant = request.app.state.tenants.get(tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail=f"unknown tenant: {tenant_id}")
+
+    cost_tracker = CostTracker(session, request.app.state.pricing)
+    budget = await BudgetEnforcer(cost_tracker).check(tenant_id, tenant.monthly_budget_usd)
+    if budget.status == BudgetStatus.HARD_STOP:
+        await AuditStore(session).record(
+            tenant_id=tenant_id, action="budget_hard_stop", actor=principal.key_id
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"monthly budget exhausted: ${budget.month_to_date_usd:.4f} "
+                f"of ${budget.monthly_budget_usd:.2f}"
+            ),
+        )
+
     provider_router = request.app.state.provider_router
     tools = _build_tools(session)
     trace_store = TraceStore(session)
     config = AgentConfig(max_steps=body.max_steps, token_budget=body.token_budget)
-    runtime = AgentRuntime(provider_router, tools, trace_store, config)
+    audit_store = AuditStore(session)
+    runtime = AgentRuntime(
+        provider_router,
+        tools,
+        trace_store,
+        config,
+        guardrails=request.app.state.guardrails,
+        cost_tracker=cost_tracker,
+        audit_store=audit_store,
+    )
 
     context = RoutingContext(
-        tenant_id=body.tenant_id,
+        tenant_id=tenant_id,
         data_classification=body.data_classification,
         cost_tier=body.cost_tier,
     )
     result = await runtime.run(
-        body.tenant_id, body.agent_name, body.system_prompt, body.user_message, context
+        tenant_id,
+        body.agent_name,
+        body.system_prompt,
+        body.user_message,
+        context,
+        guardrail_policy_name=tenant.guardrail_policy,
+    )
+    await audit_store.record(
+        tenant_id=tenant_id,
+        run_id=result.run_id,
+        action="agent_run",
+        actor=principal.key_id,
+        input_tokens=result.total_input_tokens,
+        output_tokens=result.total_output_tokens,
     )
     await session.commit()
 
@@ -116,11 +168,14 @@ async def run_agent(
 
 @router.get("/runs/{run_id}", response_model=AgentRunDetailOut)
 async def get_agent_run(
-    run_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+    run_id: uuid.UUID,
+    principal: Principal = Depends(require_role(Role.VIEWER)),
+    session: AsyncSession = Depends(get_session),
 ) -> AgentRunDetailOut:
     trace_store = TraceStore(session)
+    tenant_filter = None if principal.role == Role.ADMIN else principal.tenant_id
     try:
-        replayed = await trace_store.replay(run_id)
+        replayed = await trace_store.replay(run_id, tenant_id=tenant_filter)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

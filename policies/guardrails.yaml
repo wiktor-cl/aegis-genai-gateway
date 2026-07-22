@@ -1,0 +1,44 @@
+# Per-tenant guardrail policy, loaded by aegis.governance.policies.GuardrailPolicy.
+#
+# `pre` rules run on the outbound request before it reaches any provider.
+# `post` rules run on the inbound response before it reaches the caller.
+# Every rule that fires is recorded in the append-only audit log
+# (aegis.governance.audit) with the tenant, rule name, and action taken.
+
+version: 1
+
+default_tenant_policy: standard
+
+tenants:
+  standard:
+    pii:
+      enabled: true
+      action: redact # redact | block
+      entities: [email, phone, credit_card, ssn_like]
+    prompt_injection:
+      enabled: true
+      action: block
+    max_input_chars: 20000
+    output_validation:
+      enabled: true
+    secret_leak:
+      enabled: true
+      action: block
+
+  legal_hold:
+    # Example of a stricter tenant profile: never redact, always block on any
+    # PII hit, since legal_hold data must not reach a provider transformed
+    # either — the whole request is rejected instead.
+    pii:
+      enabled: true
+      action: block
+      entities: [email, phone, credit_card, ssn_like]
+    prompt_injection:
+      enabled: true
+      action: block
+    max_input_chars: 8000
+    output_validation:
+      enabled: true
+    secret_leak:
+      enabled: true
+      action: block

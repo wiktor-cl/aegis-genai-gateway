@@ -74,8 +74,11 @@ Built in 4 sprints; this README and `docs/` are updated as each sprint lands.
       trace with deterministic replay), 4 tools (knowledge base search, calculator, read-only
       SQL, allowlisted HTTP with SSRF guards), Postgres-backed trace storage with Alembic
       migrations, OpenTelemetry tracing + Prometheus metrics on the provider router.
-- [ ] **Sprint 3** — Governance & guardrails (PII redaction, prompt-injection screening,
-      secret-leak blocking), append-only audit log, cost & quota control, multi-tenancy/RBAC.
+- [x] **Sprint 3** — Governance & guardrails (PII redaction with Luhn-checked credit cards,
+      prompt-injection screening, secret-leak blocking, per-tenant YAML policies), append-only
+      audit log, cost tracking + monthly budget enforcement (soft alert / hard stop), and
+      multi-tenancy/RBAC (Argon2-hashed API keys with rotation, roles enforced at the DB query
+      layer — see ADR-0005) wired into both API entry points.
 - [ ] **Sprint 4** — Evaluation harness wired into CI as a merge gate, React console, IaC
       (Terraform/Bicep, statically validated), full architecture documentation.
 

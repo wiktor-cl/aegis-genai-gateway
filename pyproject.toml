@@ -66,6 +66,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 # FastAPI's dependency injection idiom is `param: X = Depends(...)`, which is
 # exactly the pattern B008 warns about in general — false positive here.
 "src/aegis/api/**" = ["B008"]
+"src/aegis/tenancy/rbac.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

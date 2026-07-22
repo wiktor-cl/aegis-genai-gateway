@@ -8,10 +8,15 @@ attached to every span as an attribute so logs and traces can be joined.
 
 If `AEGIS_OTEL_EXPORTER_OTLP_ENDPOINT` is unset (the default in this
 offline-only repository), spans are exported to stdout via
-`ConsoleSpanExporter` — never off-box, never to a paid backend.
+`ConsoleSpanExporter` — never off-box, never to a paid backend. Under
+pytest, the console exporter is skipped (spans are still created and
+recorded in-process, just not printed) purely to keep test output readable;
+this has no effect on what the app does outside of a test run.
 """
 
 from __future__ import annotations
+
+import os
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
@@ -41,7 +46,7 @@ def configure_tracing() -> None:
 
         exporter = OTLPSpanExporter(endpoint=settings.otel_exporter_otlp_endpoint)
         provider.add_span_processor(BatchSpanProcessor(exporter))
-    else:
+    elif "PYTEST_CURRENT_TEST" not in os.environ:
         provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 
     trace.set_tracer_provider(provider)

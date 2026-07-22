@@ -23,6 +23,9 @@ from pydantic import ValidationError
 from aegis.agent.tools.base import Tool, ToolExecutionError
 from aegis.agent.tools.registry import ToolRegistry
 from aegis.agent.trace import ReplayedRun, StepRecord, TraceStore
+from aegis.cost.tracker import CostTracker
+from aegis.governance.audit import AuditStore
+from aegis.governance.pipeline import GuardrailPipeline
 from aegis.providers.base import ChatMessage, ChatRequest, ProviderError, Role
 from aegis.providers.router import ProviderRouter, RoutingContext
 
@@ -39,7 +42,7 @@ class AgentConfig:
 class AgentRunResult:
     run_id: uuid.UUID
     status: str
-    """completed | failed | budget_exceeded | max_steps_exceeded"""
+    """completed | failed | budget_exceeded | max_steps_exceeded | blocked_by_guardrail"""
     final_output: str | None
     total_input_tokens: int
     total_output_tokens: int
@@ -53,11 +56,30 @@ class AgentRuntime:
         tools: ToolRegistry,
         trace_store: TraceStore,
         config: AgentConfig | None = None,
+        guardrails: GuardrailPipeline | None = None,
+        cost_tracker: CostTracker | None = None,
+        audit_store: AuditStore | None = None,
     ) -> None:
         self._router = router
         self._tools = tools
         self._trace = trace_store
         self._config = config or AgentConfig()
+        self._guardrails = guardrails
+        self._cost_tracker = cost_tracker
+        self._audit = audit_store
+
+    async def _audit_hits(self, tenant_id: str, run_id: uuid.UUID, action: str, hits: list) -> None:
+        if self._audit is None:
+            return
+        for hit in hits:
+            await self._audit.record(
+                tenant_id=tenant_id,
+                run_id=run_id,
+                action=action,
+                policy_rule=hit.rule,
+                policy_action=hit.action,
+                detail={"matches": hit.detail},
+            )
 
     async def run(
         self,
@@ -66,6 +88,7 @@ class AgentRuntime:
         system_prompt: str,
         user_message: str,
         routing_context: RoutingContext,
+        guardrail_policy_name: str | None = None,
     ) -> AgentRunResult:
         cfg = self._config
         run_id = await self._trace.start_run(
@@ -76,6 +99,16 @@ class AgentRuntime:
             data_classification=routing_context.data_classification,
             cost_tier=routing_context.cost_tier,
         )
+
+        if self._guardrails is not None:
+            pre = self._guardrails.screen_request(user_message, guardrail_policy_name)
+            await self._audit_hits(tenant_id, run_id, "guardrail_request", pre.hits)
+            if not pre.allowed:
+                await self._trace.finish_run(
+                    run_id, status="blocked_by_guardrail", error=pre.block_reason
+                )
+                return AgentRunResult(run_id, "blocked_by_guardrail", None, 0, 0, 0)
+            user_message = pre.text
 
         messages: list[ChatMessage] = [
             ChatMessage(role=Role.SYSTEM, content=system_prompt),
@@ -128,6 +161,15 @@ class AgentRuntime:
                     duration_ms=_elapsed_ms(started),
                 ),
             )
+            if self._cost_tracker is not None:
+                await self._cost_tracker.record(
+                    tenant_id,
+                    response.provider_name,
+                    response.model,
+                    response.usage.input_tokens,
+                    response.usage.output_tokens,
+                    run_id=run_id,
+                )
 
             if total_input + total_output > cfg.token_budget:
                 await self._trace.finish_run(
@@ -140,13 +182,31 @@ class AgentRuntime:
             messages.append(response.message)
 
             if not response.tool_calls:
+                final_content = response.message.content
+                if self._guardrails is not None:
+                    post = self._guardrails.screen_response(final_content, guardrail_policy_name)
+                    await self._audit_hits(tenant_id, run_id, "guardrail_response", post.hits)
+                    if not post.allowed:
+                        await self._trace.finish_run(
+                            run_id, status="blocked_by_guardrail", error=post.block_reason
+                        )
+                        return AgentRunResult(
+                            run_id,
+                            "blocked_by_guardrail",
+                            None,
+                            total_input,
+                            total_output,
+                            step_index + 1,
+                        )
+                    final_content = post.text
+
                 await self._trace.finish_run(
-                    run_id, status="completed", final_output=response.message.content
+                    run_id, status="completed", final_output=final_content
                 )
                 return AgentRunResult(
                     run_id,
                     "completed",
-                    response.message.content,
+                    final_content,
                     total_input,
                     total_output,
                     step_index + 1,
@@ -231,8 +291,8 @@ class AgentRuntime:
 
         return json.dumps({"error": last_error}), last_error, max_attempts, _elapsed_ms(started)
 
-    async def replay(self, run_id: uuid.UUID) -> ReplayedRun:
-        return await self._trace.replay(run_id)
+    async def replay(self, run_id: uuid.UUID, tenant_id: str | None = None) -> ReplayedRun:
+        return await self._trace.replay(run_id, tenant_id=tenant_id)
 
 
 def _elapsed_ms(started: float) -> int:

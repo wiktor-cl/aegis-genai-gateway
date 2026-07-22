@@ -77,3 +77,71 @@ class AgentStep(Base):
     duration_ms: Mapped[int | None] = mapped_column(default=None)
 
     run: Mapped[AgentRun] = relationship(back_populates="steps")
+
+
+class AuditLogEntry(Base):
+    """Append-only: this module never updates or deletes a row, only inserts
+    (see aegis.governance.audit.AuditStore). A real deployment should also
+    enforce this at the database role level (INSERT-only grant), not just in
+    application code — see docs/threat-model.md.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(index=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
+    actor: Mapped[str] = mapped_column(default="system")
+    action: Mapped[str]
+    """chat_completion | agent_run | guardrail_redact | guardrail_block | ..."""
+
+    provider_name: Mapped[str | None] = mapped_column(default=None)
+    model: Mapped[str | None] = mapped_column(default=None)
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    policy_rule: Mapped[str | None] = mapped_column(default=None)
+    policy_action: Mapped[str | None] = mapped_column(default=None)
+    detail: Mapped[dict | None] = mapped_column(JSON, default=None)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class CostEntry(Base):
+    __tablename__ = "cost_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(index=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
+    provider_name: Mapped[str]
+    model: Mapped[str]
+    input_tokens: Mapped[int]
+    output_tokens: Mapped[int]
+    cost_usd: Mapped[float]
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class ApiKey(Base):
+    """API key rotation model: rotating a key revokes it and inserts a new
+    row with `rotated_from` pointing at the old key's id, so the audit trail
+    of "which key was active when" is never lost.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    key_id: Mapped[str] = mapped_column(unique=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(index=True)
+    role: Mapped[str]
+    """admin | developer | viewer"""
+    hashed_secret: Mapped[str]
+    rotated_from: Mapped[uuid.UUID | None] = mapped_column(default=None)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
