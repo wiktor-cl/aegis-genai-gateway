@@ -47,5 +47,13 @@ class Settings(BaseSettings):
     jwt_signing_key: str = "dev-only-not-a-secret-change-in-env"
     jwt_algorithm: str = "HS256"
 
+    # Comma-separated allowlist for the http_get agent tool. Empty by default —
+    # a tenant policy must explicitly opt a domain in, the model never can.
+    http_tool_allowed_domains: str = ""
+
+    @property
+    def http_tool_allowed_domains_list(self) -> list[str]:
+        return [d.strip() for d in self.http_tool_allowed_domains.split(",") if d.strip()]
+
 
 settings = Settings()

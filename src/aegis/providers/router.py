@@ -8,11 +8,14 @@ code never picks a provider directly — it always goes through `route()`.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, field_validator
 
+from aegis.observability.metrics import PROVIDER_LATENCY_SECONDS, PROVIDER_TOKENS_TOTAL
+from aegis.observability.tracing import get_tracer
 from aegis.providers.base import (
     ChatRequest,
     ChatResponse,
@@ -21,6 +24,8 @@ from aegis.providers.base import (
     ProviderError,
 )
 from aegis.providers.circuit_breaker import CircuitBreakerRegistry, CircuitOpenError
+
+_tracer = get_tracer(__name__)
 
 DataClassification = str  # "public" | "internal" | "confidential" | "restricted"
 
@@ -139,18 +144,54 @@ class ProviderRouter:
 
             model = self._policy.providers[provider_name].model
             provider_request = request.model_copy(update={"model": request.model or model})
-            try:
-                response = await provider.chat(provider_request)
-            except ProviderAuthError:
-                raise  # not retryable, not a transient/failover-able condition
-            except ProviderError as exc:
-                self._breakers.on_failure(provider_name)
-                last_error = exc
-                continue
+            started = time.monotonic()
+            with _tracer.start_as_current_span(
+                "provider.chat",
+                attributes={
+                    "aegis.provider": provider_name,
+                    "aegis.request_id": request.request_id,
+                    "aegis.tenant_id": request.tenant_id,
+                },
+            ) as span:
+                try:
+                    response = await provider.chat(provider_request)
+                except ProviderAuthError:
+                    self._observe(provider_name, started, "auth_error")
+                    span.set_attribute("aegis.outcome", "auth_error")
+                    raise  # not retryable, not a transient/failover-able condition
+                except ProviderError as exc:
+                    self._breakers.on_failure(provider_name)
+                    self._observe(provider_name, started, "error")
+                    span.set_attribute("aegis.outcome", "error")
+                    last_error = exc
+                    continue
 
+                span.set_attribute("aegis.outcome", "success")
+                span.set_attribute("aegis.input_tokens", response.usage.input_tokens)
+                span.set_attribute("aegis.output_tokens", response.usage.output_tokens)
+
+            self._observe(provider_name, started, "success", response)
             self._breakers.on_success(provider_name)
             return response
 
         raise NoHealthyProviderError(
             f"no healthy provider among candidates {candidates}"
         ) from last_error
+
+    @staticmethod
+    def _observe(
+        provider_name: str,
+        started: float,
+        outcome: str,
+        response: ChatResponse | None = None,
+    ) -> None:
+        PROVIDER_LATENCY_SECONDS.labels(provider=provider_name, outcome=outcome).observe(
+            time.monotonic() - started
+        )
+        if response is not None:
+            PROVIDER_TOKENS_TOTAL.labels(provider=provider_name, direction="input").inc(
+                response.usage.input_tokens
+            )
+            PROVIDER_TOKENS_TOTAL.labels(provider=provider_name, direction="output").inc(
+                response.usage.output_tokens
+            )

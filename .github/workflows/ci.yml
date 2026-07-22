@@ -31,3 +31,6 @@ jobs:
 
       - name: Unit + contract tests
         run: pytest tests/unit tests/contract -q --cov=aegis --cov-report=term-missing
+
+      - name: Integration tests (Testcontainers, uses the runner's local Docker)
+        run: pytest tests/integration -q

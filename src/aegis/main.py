@@ -14,10 +14,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
+from aegis.api.routes_agent import router as agent_router
 from aegis.api.routes_chat import router as chat_router
 from aegis.config import settings
+from aegis.observability.metrics import render_latest
+from aegis.observability.tracing import configure_tracing
 from aegis.providers.bedrock_provider import BedrockProvider
 from aegis.providers.foundry_provider import FoundryProvider
 from aegis.providers.local_provider import LocalProvider
@@ -38,6 +41,7 @@ def build_router() -> ProviderRouter:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_tracing()
     app.state.provider_router = build_router()
     yield
 
@@ -45,10 +49,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(title="Aegis", version="0.1.0", lifespan=lifespan)
     app.include_router(chat_router)
+    app.include_router(agent_router)
+
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    FastAPIInstrumentor.instrument_app(app)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "environment": settings.environment}
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        return Response(content=render_latest(), media_type="text/plain; version=0.0.4")
 
     return app
 

@@ -70,9 +70,10 @@ Built in 4 sprints; this README and `docs/` are updated as each sprint lands.
 - [x] **Sprint 1** — Provider abstraction layer (`LLMProvider`), `LocalProvider` /
       `BedrockProvider` / `FoundryProvider`, YAML policy router with per-provider circuit
       breaking and failover, contract tests against recorded fixtures, docker-compose.
-- [ ] **Sprint 2** — Agent runtime (tool-calling loop, step/token budgets, retries, full run
-      trace), built-in tools (knowledge base search, calculator, read-only SQL, allowlisted
-      HTTP), OpenTelemetry tracing.
+- [x] **Sprint 2** — Agent runtime (tool-calling loop, step/token budgets, retries, full run
+      trace with deterministic replay), 4 tools (knowledge base search, calculator, read-only
+      SQL, allowlisted HTTP with SSRF guards), Postgres-backed trace storage with Alembic
+      migrations, OpenTelemetry tracing + Prometheus metrics on the provider router.
 - [ ] **Sprint 3** — Governance & guardrails (PII redaction, prompt-injection screening,
       secret-leak blocking), append-only audit log, cost & quota control, multi-tenancy/RBAC.
 - [ ] **Sprint 4** — Evaluation harness wired into CI as a merge gate, React console, IaC

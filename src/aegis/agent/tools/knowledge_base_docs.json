@@ -1,0 +1,42 @@
+[
+  {
+    "id": "kb-001",
+    "title": "Data classification levels",
+    "body": "Aegis recognizes four data classification levels: public, internal, confidential, and restricted. Confidential and restricted data must never be routed to a public cloud provider and always resolve to the local provider regardless of cost or quality preference."
+  },
+  {
+    "id": "kb-002",
+    "title": "Provider failover behavior",
+    "body": "When a cloud provider returns a throttling or 5xx error, the router opens a circuit breaker for that provider after five consecutive failures and fails over to the next candidate in the routing policy. Authentication errors are never retried or failed over automatically."
+  },
+  {
+    "id": "kb-003",
+    "title": "Monthly budget alerts",
+    "body": "Each tenant has a configurable monthly token budget. A soft alert notification fires at 80 percent of budget consumption. At 100 percent, further requests from that tenant are hard-stopped until the next billing cycle or a manual override."
+  },
+  {
+    "id": "kb-004",
+    "title": "PII redaction policy",
+    "body": "Before a request is sent to any provider, the guardrails layer scans for personally identifiable information such as email addresses, phone numbers, and national ID numbers, and redacts them unless the tenant policy explicitly allows PII for that data classification."
+  },
+  {
+    "id": "kb-005",
+    "title": "Incident response for provider outage",
+    "body": "If all candidate providers for a routing rule are unavailable, the gateway returns a 503 to the caller and the on-call engineer is paged. The runbook describes how to manually pin traffic to the local provider during an extended cloud outage."
+  },
+  {
+    "id": "kb-006",
+    "title": "Evaluation gate for pull requests",
+    "body": "Any pull request that changes a prompt template, a routing policy, or a guardrail rule must pass the evaluation harness in CI before merge. A regression in accuracy, cost, or latency beyond the configured threshold blocks the merge."
+  },
+  {
+    "id": "kb-007",
+    "title": "Role-based access control",
+    "body": "Aegis defines three roles: admin, developer, and viewer. Admins can edit policies and rotate API keys. Developers can create agents and view their own tenant's runs and costs. Viewers have read-only access to dashboards."
+  },
+  {
+    "id": "kb-008",
+    "title": "Agent run trace retention",
+    "body": "Every agent run is recorded step by step, including tool calls and their inputs and outputs, and stored in Postgres for at least ninety days for audit purposes. A run can be replayed deterministically from its stored trace without calling any provider again."
+  }
+]
