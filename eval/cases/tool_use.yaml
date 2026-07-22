@@ -1,0 +1,204 @@
+# Agent-mode eval cases: exercise the real AgentRuntime, real ToolRegistry
+# (calculator, knowledge_base_search, sql_query_readonly, http_get) and real
+# GuardrailPipeline. Only the "model" is scripted (see docs/adr/0008) —
+# golden_tool_calls says what a well-behaved model would ask for; the tool
+# itself actually runs and its real result is what the agent loop sees.
+
+cases:
+  - id: tu-001-calculator-basic-multiplication
+    category: tool_use
+    mode: agent
+    user_message: "What is 6 * 7?"
+    golden_tool_calls:
+      - tool: calculator
+        arguments: { expression: "6 * 7" }
+    golden_final_text: "6 * 7 is 42."
+    assertions:
+      - type: tool_called
+        value: calculator
+      - type: status_equals
+        value: completed
+      - type: contains
+        value: "42"
+
+  - id: tu-002-calculator-sqrt
+    category: tool_use
+    mode: agent
+    user_message: "What is the square root of 144?"
+    golden_tool_calls:
+      - tool: calculator
+        arguments: { expression: "sqrt(144)" }
+    golden_final_text: "The square root of 144 is 12."
+    assertions:
+      - type: tool_called
+        value: calculator
+      - type: contains
+        value: "12"
+
+  - id: tu-003-calculator-round
+    category: tool_use
+    mode: agent
+    user_message: "Round 3.14159 to 2 decimal places."
+    golden_tool_calls:
+      - tool: calculator
+        arguments: { expression: "round(3.14159, 2)" }
+    golden_final_text: "Rounded, 3.14159 becomes 3.14."
+    assertions:
+      - type: tool_called
+        value: calculator
+      - type: contains
+        value: "3.14"
+
+  - id: tu-004-calculator-two-step-chain
+    category: tool_use
+    mode: agent
+    user_message: "Compute 10 + 5, then multiply the result by 3."
+    golden_tool_calls:
+      - tool: calculator
+        arguments: { expression: "10 + 5" }
+      - tool: calculator
+        arguments: { expression: "(10 + 5) * 3" }
+    golden_final_text: "The result is 45."
+    assertions:
+      - type: tool_called
+        value: calculator
+      - type: status_equals
+        value: completed
+      - type: contains
+        value: "45"
+
+  - id: tu-005-kb-search-provider-outage
+    category: tool_use
+    mode: agent
+    user_message: "Search the knowledge base for what happens during a provider outage."
+    golden_tool_calls:
+      - tool: knowledge_base_search
+        arguments: { query: "provider outage incident response" }
+    golden_final_text: >-
+      During a provider outage, if all candidates are unavailable the gateway returns a 503
+      and pages the on-call engineer; the runbook covers pinning traffic to the local provider.
+    assertions:
+      - type: tool_called
+        value: knowledge_base_search
+      - type: contains
+        value: "503"
+      - type: contains
+        value: "on-call"
+
+  - id: tu-006-kb-search-pii-policy
+    category: tool_use
+    mode: agent
+    user_message: "Look up the PII redaction policy in the knowledge base."
+    golden_tool_calls:
+      - tool: knowledge_base_search
+        arguments: { query: "PII redaction policy" }
+    golden_final_text: >-
+      PII such as emails, phone numbers, and national ID numbers is redacted before reaching
+      any provider unless the tenant explicitly allows it.
+    assertions:
+      - type: tool_called
+        value: knowledge_base_search
+      - type: contains
+        value: "redacted"
+
+  - id: tu-007-kb-search-rbac-roles
+    category: tool_use
+    mode: agent
+    user_message: "According to the knowledge base, what roles exist?"
+    golden_tool_calls:
+      - tool: knowledge_base_search
+        arguments: { query: "role based access control roles" }
+    golden_final_text: "There are three roles: admin, developer, and viewer."
+    assertions:
+      - type: tool_called
+        value: knowledge_base_search
+      - type: contains
+        value: "admin"
+      - type: contains
+        value: "viewer"
+
+  - id: tu-008-kb-search-trace-retention
+    category: tool_use
+    mode: agent
+    user_message: "How long are agent run traces retained, according to the knowledge base?"
+    golden_tool_calls:
+      - tool: knowledge_base_search
+        arguments: { query: "agent run trace retention" }
+    golden_final_text: "Agent run traces are retained in Postgres for at least ninety days for audit purposes."
+    assertions:
+      - type: tool_called
+        value: knowledge_base_search
+      - type: contains
+        value: "ninety days"
+
+  - id: tu-009-sql-readonly-arithmetic
+    category: tool_use
+    mode: agent
+    user_message: "Run a read-only query to compute 1 + 1."
+    golden_tool_calls:
+      - tool: sql_query_readonly
+        arguments: { query: "SELECT 1 + 1 AS result" }
+    golden_final_text: "The query returned 2."
+    assertions:
+      - type: tool_called
+        value: sql_query_readonly
+      - type: contains
+        value: "2"
+
+  - id: tu-010-sql-readonly-literal-string
+    category: tool_use
+    mode: agent
+    user_message: "Use SQL to select the literal string 'ok' as status."
+    golden_tool_calls:
+      - tool: sql_query_readonly
+        arguments: { query: "SELECT 'ok' AS status" }
+    golden_final_text: "The query result status is ok."
+    assertions:
+      - type: tool_called
+        value: sql_query_readonly
+      - type: contains
+        value: "ok"
+
+  - id: tu-011-sql-readonly-empty-result
+    category: tool_use
+    mode: agent
+    user_message: "Run a SQL query that should return no rows."
+    golden_tool_calls:
+      - tool: sql_query_readonly
+        arguments: { query: "SELECT 1 AS n WHERE 1 = 0" }
+    golden_final_text: "The query returned no rows."
+    assertions:
+      - type: tool_called
+        value: sql_query_readonly
+      - type: contains
+        value: "no rows"
+      - type: status_equals
+        value: completed
+
+  - id: tu-012-http-get-status-page
+    category: tool_use
+    mode: agent
+    user_message: "Fetch the status page at https://eval-fixtures.test/status"
+    golden_tool_calls:
+      - tool: http_get
+        arguments: { url: "https://eval-fixtures.test/status" }
+    golden_final_text: "The status page reports all systems normal."
+    assertions:
+      - type: tool_called
+        value: http_get
+      - type: status_equals
+        value: completed
+
+  - id: tu-013-http-get-health-endpoint
+    category: tool_use
+    mode: agent
+    user_message: "Check https://eval-fixtures.test/health for me."
+    golden_tool_calls:
+      - tool: http_get
+        arguments: { url: "https://eval-fixtures.test/health" }
+    golden_final_text: "The health endpoint responded successfully."
+    assertions:
+      - type: tool_called
+        value: http_get
+      - type: contains
+        value: "successfully"

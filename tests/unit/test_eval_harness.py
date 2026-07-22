@@ -7,9 +7,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from aegis.config import REPO_ROOT
 from aegis.eval.models import Assertion, EvalCase, GoldenToolCall, load_cases
 from aegis.eval.report import build_report, to_json, to_markdown
 from aegis.eval.runner import run_case, run_cases
+
+EVAL_CASES_DIR = REPO_ROOT / "eval" / "cases"
 
 
 def _case(**overrides) -> EvalCase:
@@ -149,3 +152,21 @@ cases:
     assert report.total == 1
     assert "sample-1" not in to_markdown(report)  # only failures are itemized by id
     assert '"id": "sample-1"' in to_json(report)
+
+
+async def test_the_real_eval_case_bank_passes_in_full() -> None:
+    """Regression guard for eval/cases/*.yaml itself — the same cases the
+    CI eval-gate job runs, exercised here too so a broken fixture (or a real
+    regression in guardrails/tools/runtime) fails fast under plain `pytest`,
+    not only in the separate CI job."""
+    cases = load_cases(EVAL_CASES_DIR)
+    assert 40 <= len(cases) <= 60
+
+    results = await run_cases(cases)
+    report = build_report(results)
+
+    failures = [
+        f"{r.case_id}: {r.error or [a.detail for a in r.assertion_results if not a.passed]}"
+        for r in report.failures
+    ]
+    assert not failures, failures

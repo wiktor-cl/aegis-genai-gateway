@@ -128,8 +128,21 @@ Poza `src/aegis/`:
 - **[ ] Sprint 4 — Evaluation gate, konsola, IaC. W TRAKCIE.** Harness ewaluacyjny jako merge
   gate w CI, konsola operatora (React + TypeScript + Tailwind), IaC (Terraform dla AWS, Bicep
   dla Azure — tylko walidacja statyczna), pełna dokumentacja architektury (C4).
-  Stan obecny: `src/aegis/eval/` założone (na razie same modele danych, `models.py`), jeszcze
-  nieukończone i niezacommitowane; `console/` i `infra/` jeszcze nie rozpoczęte.
+
+  Postęp:
+  - [x] **Eval harness + eval-gate w CI.** `GoldenScriptProvider` (deterministyczny fake
+    providera sterowany fixture'ami — [ADR-0008](docs/adr/0008-eval-gate-golden-fixtures.md)),
+    runner wykonujący przypadki w trybie `chat` (przez `GuardrailPipeline`) i `agent` (przez
+    prawdziwy `AgentRuntime` + prawdziwe narzędzia), scoring asercji, CLI
+    (`python -m aegis.eval.cli`), 58 przypadków w `eval/cases/*.yaml` (chat_quality, tool_use,
+    tool_safety, guardrails, robustness), job `eval-gate` w `.github/workflows/ci.yml`
+    (wymaga 100% przejść), test regresyjny uruchamiający cały bank przypadków pod `pytest`.
+    *(commit `c7d247a` + kolejny z przypadkami/CI)*
+  - [ ] Konsola operatora (React + TypeScript + Tailwind) — nierozpoczęte.
+  - [ ] IaC (Terraform AWS, Bicep Azure, tylko walidacja statyczna) — nierozpoczęte.
+  - [ ] Diagramy C4 (`docs/architecture/`), `docs/cost-model.md`, `docs/runbook.md` —
+    nierozpoczęte. `docs/threat-model.md` (STRIDE) już istnieje i jest kompletny sprzed tego
+    etapu.
 
 ## Kluczowe decyzje architektoniczne
 

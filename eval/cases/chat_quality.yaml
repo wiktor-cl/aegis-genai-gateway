@@ -1,0 +1,126 @@
+# Chat-mode eval cases: no tools, golden_final_text is the "known good"
+# reply for this prompt (see docs/adr/0008). These check that the harness's
+# assertion scoring is correct and document expected response shape/content
+# for prompts a real model would face — not the quality of a live model.
+
+cases:
+  - id: cq-001-cloud-providers-named
+    category: chat_quality
+    user_message: "What are the three model providers Aegis' router can dispatch to?"
+    golden_final_text: >-
+      Aegis' policy router can dispatch to three providers: local (Ollama), Bedrock (AWS),
+      and Foundry (Azure).
+    assertions:
+      - type: contains
+        value: "local"
+      - type: contains
+        value: "Bedrock"
+      - type: contains
+        value: "Foundry"
+
+  - id: cq-002-confidential-routing-one-liner
+    category: chat_quality
+    user_message: "In one sentence, what happens when data is classified confidential for routing?"
+    golden_final_text: "Confidential data always routes to the local provider and never leaves the organization."
+    assertions:
+      - type: contains
+        value: "local provider"
+      - type: not_contains
+        value: "Bedrock"
+
+  - id: cq-003-json-format-instruction-followed
+    category: chat_quality
+    user_message: 'Return a JSON object with keys "status" and "message", status should be "ok".'
+    golden_final_text: '{"status": "ok", "message": "all systems normal"}'
+    assertions:
+      - type: regex
+        value: '^\{.*\}$'
+      - type: contains
+        value: '"status": "ok"'
+
+  - id: cq-004-refusal-out-of-scope
+    category: chat_quality
+    user_message: "What's the current stock price of Acme Corp?"
+    golden_final_text: "I don't have real-time market data access, so I can't answer that."
+    assertions:
+      - type: contains
+        value: "don't have"
+      - type: not_contains
+        value: "$"
+
+  - id: cq-005-simple-arithmetic-no-tool
+    category: chat_quality
+    user_message: "Without using any tools, what is 2 + 2?"
+    golden_final_text: "4"
+    assertions:
+      - type: contains
+        value: "4"
+
+  - id: cq-006-list-format-one-per-line
+    category: chat_quality
+    user_message: "List the three tenancy roles, one per line."
+    golden_final_text: |-
+      admin
+      developer
+      viewer
+    assertions:
+      - type: contains
+        value: "admin"
+      - type: contains
+        value: "developer"
+      - type: contains
+        value: "viewer"
+
+  - id: cq-007-negative-constraint-followed
+    category: chat_quality
+    user_message: "Explain PII redaction without mentioning credit cards."
+    golden_final_text: >-
+      PII redaction detects emails, phone numbers, and national ID numbers, replacing them
+      with redaction placeholders before the request reaches any provider.
+    assertions:
+      - type: not_contains
+        value: "credit card"
+      - type: contains
+        value: "redaction"
+
+  - id: cq-008-budget-hard-stop-explained
+    category: chat_quality
+    user_message: "In plain language, what happens at 100 percent of monthly budget?"
+    golden_final_text: >-
+      Once a tenant hits 100 percent of its monthly budget, new agent runs are hard-stopped
+      until the next billing cycle.
+    assertions:
+      - type: contains
+        value: "hard-stop"
+      - type: contains
+        value: "billing cycle"
+
+  - id: cq-009-circuit-breaker-explained
+    category: chat_quality
+    user_message: "What does the circuit breaker do after repeated provider failures?"
+    golden_final_text: >-
+      After five consecutive failures the circuit breaker opens for that provider, and the
+      router fails over to the next candidate instead of retrying a known-broken one.
+    assertions:
+      - type: contains
+        value: "circuit breaker"
+      - type: contains
+        value: "fails over"
+
+  - id: cq-010-only-admin-rotates-keys
+    category: chat_quality
+    user_message: "Name the one role allowed to rotate API keys."
+    golden_final_text: "Only the admin role can create, rotate, or revoke API keys."
+    assertions:
+      - type: contains
+        value: "admin"
+      - type: not_contains
+        value: "developer can rotate"
+
+  - id: cq-011-vague-input-asks-for-clarification
+    category: chat_quality
+    user_message: "help"
+    golden_final_text: "Could you clarify what you'd like help with?"
+    assertions:
+      - type: contains
+        value: "clarify"
