@@ -58,3 +58,27 @@ jobs:
         with:
           name: eval-report
           path: eval-report.json
+
+  console:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install dependencies
+        working-directory: console
+        run: npm ci
+
+      - name: Lint
+        working-directory: console
+        run: npm run lint
+
+      - name: Type-check and build
+        working-directory: console
+        run: npm run build
