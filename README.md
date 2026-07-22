@@ -41,10 +41,18 @@ docker compose exec api alembic upgrade head
 
 # bootstrap the first admin API key — every other key is minted through the
 # API itself, which needs an admin key to call; this is the one bootstrap
-# exception (see scripts/seed.py)
+# exception (see scripts/seed.py). Needs the aegis package importable, hence
+# the local install first (a throwaway venv is fine — this runs on the host,
+# not in a container, because it talks to Postgres on localhost:5432).
+python -m venv .venv && .venv\Scripts\activate   # or: source .venv/bin/activate
+pip install -e .
 AEGIS_DATABASE_URL=postgresql+asyncpg://aegis:aegis@localhost:5432/aegis \
     python scripts/seed.py --tenant-id acme-support --role admin
 ```
+
+`acme-support` is one of two example tenants predefined in `policies/tenants.yaml` (the other,
+`acme-legal`, uses the stricter `legal_hold` guardrail policy — see
+[ADR-0002](docs/adr/0002-policy-based-routing.md)).
 
 This starts Postgres, Redis, a local Ollama instance, and the Aegis API — fully offline, no
 cloud credentials anywhere in the stack (see `docker-compose.yml`). The operator console
