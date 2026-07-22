@@ -1,7 +1,82 @@
 # Aegis
 
+[![CI](https://github.com/wiktor-cl/aegis-genai-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/wiktor-cl/aegis-genai-gateway/actions/workflows/ci.yml)
+
 Enterprise multi-cloud GenAI agent gateway and runtime — one API for every team, security and
 cost policy enforced centrally, model providers swappable without touching application code.
+
+## What it actually does
+
+Two C4 views (the full set, including the component diagram, lives in
+[`docs/architecture/`](docs/architecture/)) and a real trace, captured by actually running the
+agent loop against a live local model — not hand-written, not simulated.
+
+**Who/what talks to Aegis:**
+
+```mermaid
+flowchart TB
+    Developer["Developer / team\n[Person]"] -->|"HTTPS, API key"| Aegis
+    Operator["Operator / admin\n[Person]"] -->|"HTTPS, via the Console"| Aegis
+    Aegis["Aegis Gateway\n[Software System]"] -->|"only path actually\ncalled at runtime"| Ollama["Ollama\n[local]"]
+    Aegis -.->|"contract-tested only\n— never live here"| Bedrock["AWS Bedrock"]
+    Aegis -.->|"contract-tested only\n— never live here"| Foundry["Azure AI Foundry"]
+
+    style Bedrock stroke-dasharray: 5 5
+    style Foundry stroke-dasharray: 5 5
+```
+
+**What's actually deployed** (`docker-compose.yml`):
+
+```mermaid
+flowchart TB
+    Console["Console\nReact + TS + Tailwind"] -->|"HTTPS + API key"| API["API\nFastAPI, Python 3.12"]
+    API -->|"asyncpg"| Postgres[("Postgres\nruns, audit, cost, keys")]
+    API -.->|"provisioned, not yet\nwired up — see D1 in\ndocs/threat-model.md"| Redis[("Redis")]
+    API -->|"/api/chat"| Ollama["Ollama"]
+
+    style Redis stroke-dasharray: 5 5
+```
+
+**A real trace** — `GET /v1/agents/runs/{id}`, captured from an actual `docker compose up` +
+`ollama pull llama3.1:8b` + `POST /v1/agents/run` call (trimmed of Ollama's raw response
+envelope for length; nothing here is hand-typed):
+
+```json
+{
+  "run_id": "07d84de3-4cd9-4cda-bde7-eefe1094bc25",
+  "status": "completed",
+  "final_output": "The result of 6 * 7 is 42.",
+  "total_input_tokens": 531,
+  "total_output_tokens": 32,
+  "steps": [
+    {
+      "step_type": "llm_call",
+      "provider_name": "local", "model": "llama3.1:8b",
+      "output": { "tool_calls": [
+        { "id": "call_wechav2j", "name": "calculator", "arguments": { "expression": "6 * 7" } }
+      ] },
+      "input_tokens": 434, "output_tokens": 19, "duration_ms": 16621
+    },
+    {
+      "step_type": "tool_call",
+      "tool_name": "calculator",
+      "input": { "expression": "6 * 7" },
+      "output": { "result": "42" },
+      "duration_ms": 0
+    },
+    {
+      "step_type": "llm_call",
+      "provider_name": "local", "model": "llama3.1:8b",
+      "output": { "message": { "content": "The result of 6 * 7 is 42." } },
+      "input_tokens": 97, "output_tokens": 13, "duration_ms": 2820
+    }
+  ]
+}
+```
+
+The Console renders exactly this response as a step-by-step trace viewer:
+
+![Aegis Console — agent run trace view](docs/img/console-run-trace.png)
 
 > **Portfolio project.** Built to demonstrate GenAI solution architecture: provider
 > abstraction, policy-based routing, agent runtime, guardrails, cost control, multi-tenancy,
@@ -26,6 +101,16 @@ cost policy enforced centrally, model providers swappable without touching appli
   `az deployment create` are never run, and CI has no cloud credentials to run them with.
 - Nothing here is a claim of production deployment. It is a claim of reviewable, tested,
   deployable-as-is code — verified as far as that can be verified for free.
+
+## Prerequisites
+
+| Tool | Minimum version | Needed for |
+|---|---|---|
+| [Docker Engine](https://docs.docker.com/engine/install/) + Compose V2 | 24.0+ (the `docker compose` plugin, not the standalone `docker-compose` v1 script — `docker-compose.yml` uses the plain Compose Specification, no `version:` key) | `docker compose up` — the API, Postgres, Redis, Ollama |
+| [Python](https://www.python.org/downloads/) | 3.12+ (`pyproject.toml`'s `requires-python`) | Running `scripts/seed.py`/`scripts/smoke_test_local_provider.py` locally, or hacking on `src/aegis` outside Docker |
+| [Node.js](https://nodejs.org/) | 22+ (pinned in `.github/workflows/ci.yml`'s `console` job) | `console/` — `npm install && npm run dev` |
+
+Nothing else — no cloud CLI, no cloud account, no API key. See "Zero-cost, local-first" above.
 
 ## Run it
 
@@ -57,23 +142,6 @@ AEGIS_DATABASE_URL=postgresql+asyncpg://aegis:aegis@localhost:5432/aegis \
 This starts Postgres, Redis, a local Ollama instance, and the Aegis API — fully offline, no
 cloud credentials anywhere in the stack (see `docker-compose.yml`). The operator console
 (`console/`) is a separate `npm run dev` step — see `console/README.md`.
-
-## Architecture at a glance
-
-```mermaid
-flowchart LR
-    Team[Team / application] -->|"one API"| Gateway[Aegis Gateway]
-    Gateway --> Guardrails[Governance & guardrails]
-    Gateway --> Router[Policy router]
-    Router -->|"default, zero-cost"| Local[LocalProvider\n(Ollama)]
-    Router -.->|"contract-tested only"| Bedrock[BedrockProvider\n(AWS Bedrock)]
-    Router -.->|"contract-tested only"| Foundry[FoundryProvider\n(Azure AI Foundry)]
-    Gateway --> Audit[(Postgres: audit, cost, evals)]
-    Gateway --> Cache[(Redis: queue, rate limit, cache)]
-    Gateway --> Otel[OpenTelemetry / Prometheus]
-```
-
-Full C4 diagrams (context, container, component) live in `docs/architecture/`.
 
 ## Why it's built this way
 
@@ -113,6 +181,7 @@ Built in 4 sprints; this README and `docs/` are updated as each sprint lands.
 src/aegis/          FastAPI app, provider layer, agent runtime, governance, cost, tenancy
 console/            React + TypeScript + Tailwind operator console
 eval/               Eval-gate: 58 golden-fixture cases run as a CI merge gate (ADR-0008)
+scripts/            seed.py (bootstrap admin key), smoke_test_local_provider.py (live Ollama check)
 policies/           YAML policy: routing, guardrails, pricing, tenants
 infra/terraform/    AWS IaC (Bedrock, IAM, VPC endpoints, Secrets Manager) — validated, not applied
 infra/bicep/        Azure IaC (AI Foundry, Key Vault, Private Endpoint, Managed Identity) — same
